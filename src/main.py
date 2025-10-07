@@ -8,54 +8,74 @@ import json
 def save_categories(categories_file, category):
     try:
         with open(categories_file, "w") as f:
-            json.dump(st.session_state[category], f)
+            json.dump(st.session_state[category.lower()], f)
     except IOError as e:
-        st.error(f"Error creating {categories_file} file")
+        st.error(f"Error creating {categories_file} file: {e}")
 
 def load_categories(categories_file, state):
-    if state not in st.session_state:
-        st.session_state[state] = {
-            "Uncategorized": [],
-        }
-    if not os.path.exists(categories_file):
+    state = state.lower()
+    loaded_flag = state + "_loaded"
+    if not st.session_state.get(loaded_flag, False):
+        if state not in st.session_state:
+            st.session_state[state] = {
+                "uncategorized": [],
+            }
+        if not os.path.exists(categories_file):
+            try:
+                with open(categories_file, "w") as f:
+                    json.dump(st.session_state[state], f)
+            except IOError as e:
+                st.error(f"Error creating {categories_file} file: {e}")
         try:
-            with open(categories_file, "w") as f:
-                json.dump(st.session_state[state], f)
+            with open(categories_file, "r") as f:
+                # Ensure all category keys and details are lowercased
+                loaded_data = json.load(f)
+                st.session_state[state] = {k.lower(): [d.lower() for d in v] for k, v in loaded_data.items()}
+                st.session_state[loaded_flag] = True
         except IOError as e:
-            st.error(f"Error creating {categories_file} file")
-    try:
-        with open(categories_file, "r") as f:
-            st.session_state[state] = json.load(f)
-    except IOError as e:
-        st.error(f"Error reading {categories_file} file")
-
+            st.error(f"Error reading {categories_file} file: {e}")
 
 def add_categories(new_category, category,categories_file):
-    if category == "Uncategorized" or category in st.session_state[category]:
+    category = category.lower()
+    new_category = new_category.lower()
+    if new_category == "uncategorized" or new_category in st.session_state[category]:
         return
-    st.session_state[category][new_category.capitalize()] = []
+    st.session_state[category][new_category] = []
     try:
         with open(categories_file, "w") as f:
             json.dump(st.session_state[category], f)
     except IOError as e:
-        st.error(f"Error creating {categories_file} file")
+        st.error(f"Error creating {categories_file} file: {e}")
 
 def assign_category(row, category):
-    concept = row["Details"]
-    for k, v in st.session_state[category].items():
-        if concept in v:
-            return k
+    concept = row["Details"].lower()
+    category = category.lower()
+    lookup = st.session_state["details_to_category"] if category == "categories" else st.session_state["details_to_income_ctageory"]
+    k = lookup.get(concept)
+    if k:
+        return k.capitalize()
     return "Uncategorized"
         
 def handle_selection(categories_file, category, key, df):
+    category = category.lower()
     changes = st.session_state[key]
     edited_rows = changes["edited_rows"]
     for rw_idx, row_changes in edited_rows.items():
         row = st.session_state[df].iloc[rw_idx]
-        for k, v in st.session_state[category].items():
-            if row["Details"] in v:
-                v.remove(row["Details"])
-        st.session_state[category][row_changes["Category"]].append(row["Details"])
+        detail = row["Details"].lower()
+        new_category = row_changes["Category"].lower()
+        lookup = st.session_state["details_to_category"] if category == "categories" else st.session_state["details_to_income_ctageory"]
+        # Remove from old category if present
+        if detail in lookup:
+            old_category = lookup[detail]
+            if detail in st.session_state[category][old_category]:
+                st.session_state[category][old_category].remove(detail)
+            del lookup[detail]
+        # Add to new category
+        if new_category not in st.session_state[category]:
+            st.session_state[category][new_category] = []
+        lookup[detail] = new_category
+        st.session_state[category][new_category].append(detail)
         save_categories(categories_file, category)
     
 def load_transactions(file):
@@ -78,7 +98,10 @@ def main():
     )
 
     load_categories("categories.json", "categories")
+    st.session_state["details_to_category"] = {detail: k for k, v in st.session_state["categories"].items() for detail in v}
     load_categories("income_categories.json", "income_categories")
+    st.session_state["details_to_income_ctageory"] = {detail:k for k, v in st.session_state["income_categories"].items() for detail in v}
+    
 
     st.title("Finance Manager Dashboard")
     st.markdown("""
@@ -120,7 +143,7 @@ def main():
                         "Category",
                         help="Select Category",
                         width="medium",
-                        options=st.session_state.categories.keys(),
+                        options=[k.capitalize() for k in st.session_state.categories.keys()],
                         required=True,
                     )
                 },
@@ -156,7 +179,7 @@ def main():
                         "Category",
                         help="Select Category",
                         width="medium",
-                        options=st.session_state["income_categories"].keys(),
+                        options=[k.capitalize() for k in st.session_state["income_categories"].keys()],
                         required=True,
                     )
                 },
@@ -165,13 +188,13 @@ def main():
                 key="income-editor",
             )
             st.session_state["df_income"] = df_income.copy()
-        fig = px.pie(
-            df_income,
-            values="Amount",
-            names="Category",
-            title="Income by Category"
-    )
-        st.plotly_chart(fig, use_container_width=True)
+            fig_income = px.pie(
+                df_income,
+                values="Amount",
+                names="Category",
+                title="Income by Category"
+                )
+            st.plotly_chart(fig_income, use_container_width=True)
     else:
         st.info("Please upload a CSV file")
     
