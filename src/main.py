@@ -3,7 +3,12 @@ import pandas as pd
 import plotly.express as px
 import os
 import json
+from constants import(
+    EXPENSES_CATEGORY,
+    INCOME_CATEGORY
+)
 
+#TODO: Clean with function files, handle bank formats, custom data range, undo, validators?, RULES?
 
 def save_categories(categories_file, category):
     try:
@@ -50,7 +55,7 @@ def add_categories(new_category, category,categories_file):
 def assign_category(row, category):
     concept = row["Details"].lower()
     category = category.lower()
-    lookup = st.session_state["details_to_category"] if category == "categories" else st.session_state["details_to_income_ctageory"]
+    lookup = st.session_state[EXPENSES_CATEGORY] if category == "categories" else st.session_state[INCOME_CATEGORY]
     k = lookup.get(concept)
     if k:
         return k.capitalize()
@@ -64,19 +69,17 @@ def handle_selection(categories_file, category, key, df):
         row = st.session_state[df].iloc[rw_idx]
         detail = row["Details"].lower()
         new_category = row_changes["Category"].lower()
-        lookup = st.session_state["details_to_category"] if category == "categories" else st.session_state["details_to_income_ctageory"]
-        # Remove from old category if present
+        lookup = st.session_state[EXPENSES_CATEGORY] if category == "categories" else st.session_state[INCOME_CATEGORY]
         if detail in lookup:
             old_category = lookup[detail]
             if detail in st.session_state[category][old_category]:
                 st.session_state[category][old_category].remove(detail)
             del lookup[detail]
-        # Add to new category
         if new_category not in st.session_state[category]:
             st.session_state[category][new_category] = []
         lookup[detail] = new_category
         st.session_state[category][new_category].append(detail)
-        save_categories(categories_file, category)
+    save_categories(categories_file, category)
     
 def load_transactions(file):
     try:
@@ -98,9 +101,9 @@ def main():
     )
 
     load_categories("categories.json", "categories")
-    st.session_state["details_to_category"] = {detail: k for k, v in st.session_state["categories"].items() for detail in v}
+    st.session_state[EXPENSES_CATEGORY] = {detail: k for k, v in st.session_state["categories"].items() for detail in v}
     load_categories("income_categories.json", "income_categories")
-    st.session_state["details_to_income_ctageory"] = {detail:k for k, v in st.session_state["income_categories"].items() for detail in v}
+    st.session_state[INCOME_CATEGORY] = {detail:k for k, v in st.session_state["income_categories"].items() for detail in v}
     
 
     st.title("Finance Manager Dashboard")
