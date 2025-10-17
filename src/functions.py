@@ -97,8 +97,7 @@ def load_page():
     load_categories("categories.json", "categories")
     load_categories("income_categories.json", "income_categories")
 
-def edit_rows_wrapper(scope, current_df, store):
-    key = "data-editor"
+def edit_rows_wrapper(scope, current_df, store, key):
     e_row = "edited_rows"
     edited_data = st.session_state[key][e_row]
     if edited_data:
