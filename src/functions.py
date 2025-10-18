@@ -106,6 +106,9 @@ def edit_rows_wrapper(scope, current_df, store, key):
             scope=scope,
             current_df=current_df
         )
+        if store.current_file:
+            store.apply_tag_edits(edited_rows=edited_data, current_df=current_df)
+    
 
 def load_dataframes(uploaded_transacrtions):
     df = load_transactions(uploaded_transacrtions)

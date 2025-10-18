@@ -39,8 +39,11 @@ def load_page():
 
 def create_df_from_file(uploaded_transactions):
     df = load_transactions(uploaded_transactions)
+    df = df.drop(columns=["Status"], axis=1)
     df_expenses = df[df["Debit/Credit"] == "Debit"].copy()
     df_expenses["Category"] = df.apply(assign_category, axis=1, args=("categories", st.session_state["store"].is_loaded()))
+    file_name = uploaded_transactions.name
+    df_expenses = st.session_state["store"].apply_tags_to_df(df=df_expenses, filename=file_name)
     df_income = df[df["Debit/Credit"] == "Credit"].copy()
     df_income["Category"] = df.apply(assign_category, axis=1, args=("income_categories", st.session_state["store"].is_loaded()))
     
@@ -51,21 +54,36 @@ def create_df_from_file(uploaded_transactions):
             placeholder="Add groceries, videogames, dinning..",
             key="category-input"
             )
-        category_button = st.button(
-            "Add category", 
-            key="add_category_button"
+        tag_text = st.text_input(
+            "Add new transaction tag",
+            placeholder="Add protein, fruit, futbol..",
+            key="tag-input"
             )
-        if category_text and category_button:
-            st.session_state["store"].add_category(name=category_text, scope="categories")
-            category_text = ""
-        save_button = st.button(
-            "Save changes", 
-            key="save_category_changes"
+        col1_e, col2_e, col3_e = st.columns(3)
+        with col1_e:
+            category_button = st.button(
+                "Add category", 
+                key="add_category_button"
             )
-        if save_button:
-            st.session_state["store"].save_all()
-            
-        
+            if category_text and category_button:
+                st.session_state["store"].add_category(name=category_text, scope="categories")
+                category_text = ""
+        with col2_e:
+            tag_button = st.button(
+                "Add tag", 
+                key="add_tag_button"
+            )
+            if tag_text and tag_button:
+                # st.session_state["store"].add_category(name=category_text, scope="categories")
+                # category_text = ""
+                # st.session_state["store"].add_tags(tag=tag_text, )
+        with col3_e:
+            save_button = st.button(
+                "Save changes", 
+                key="save_category_changes"
+            )
+            if save_button:
+                st.session_state["store"].save_all()
         
         df_expenses = st.data_editor(
             df_expenses,
@@ -77,7 +95,8 @@ def create_df_from_file(uploaded_transactions):
                     width="medium",
                     options=[k.capitalize() for k in st.session_state["store"].get_options(scope="categories")],
                     required=True,
-                )
+                ),
+                "transaction_id": None,
             },
             on_change=edit_rows_wrapper,
             args=(
@@ -102,21 +121,22 @@ def create_df_from_file(uploaded_transactions):
             placeholder="Add job, investment, debts..",
             key="category_income-input"
             )
-        category_button = st.button(
-            "Add category", 
-            key="add_income_category_button"
+        col1, col2 = st.columns(2)
+        with col1:
+            category_button = st.button(
+                "Add category", 
+                key="add_income_category_button"
             )
-        if category_text and category_button:
-            st.session_state["store"].add_category(name=category_text,scope="income_categories")
-            category_text = ""
-
-        save_i_button = st.button(
-            "Save changes", 
-            key="save_income_category_changes"
+            if category_text and category_button:
+                st.session_state["store"].add_category(name=category_text,scope="income_categories")
+                category_text = ""
+        with col2:
+            save_i_button = st.button(
+                "Save changes in dataframe", 
+                key="save_income_category_changes"
             )
-        if save_i_button:
-            st.session_state["store"].save_all()
-    
+            if save_i_button:
+                st.session_state["store"].save_all()
 
         df_income = st.data_editor(
             df_income,
