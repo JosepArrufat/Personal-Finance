@@ -22,6 +22,7 @@ class CategoryStore:
             "categories": {},
             "income_categories": {},
         }
+        self.tags_list: List[str] = []
         self.tags: Dict[str, Dict[str, List[str]]] = {}
         self.current_file: Optional[str] = None
         self._dirty: bool = False
@@ -62,6 +63,7 @@ class CategoryStore:
             except IOError as e:
                 print(f"Error reading tags file: {e}")
         self.rebuild_lookups()
+        self.rebuild_tags()
         self._loaded = True  
     def is_loaded(self) -> bool:
         return self._loaded             
@@ -145,12 +147,20 @@ class CategoryStore:
             self.tags[self.current_file] = {}
         self.tags[self.current_file][transaction_id] = tags
         self._tags_dirty = True
-    def add_tags(self, tag: str, transaction_id: str):
-        tag_normalized = tag.strip().lower()
-        current_tags = self.get_tags(transaction_id)
-        if tag_normalized and tag_normalized not in current_tags:
-            current_tags.append(tag_normalized)
-            self.set_tags(self, transaction_id, current_tags)
+    # def add_tags(self, tag: str, transaction_id: str):
+    #     tag_normalized = tag.strip().lower()
+    #     current_tags = self.get_tags(transaction_id)
+    #     if tag_normalized and tag_normalized not in current_tags:
+    #         current_tags.append(tag_normalized)
+    #         self.set_tags(self, transaction_id, current_tags)
+    def rebuild_tags(self):
+        tags_set = set()
+        for file_id, tx_id in self.tags.items():
+            for txn_id, tags_list in tx_id.items():
+                tags_set.update(tags_list)
+        tags_list = list(tags_set)
+        self.tags_list = sorted(tags_list)
+
     def remove_tag(self, tag: str, transaction_id: str):
         current_tags = self.get_tags(transaction_id)
         tag_normalized = tag.strip().lower()
@@ -175,12 +185,13 @@ class CategoryStore:
             edited_rows: Dict[int, Dict[str, object]],
             current_df: "pd.Dataframe",
     )->None:
-        for rw_idx, row_canges in edited_rows.items():
-            if "tags" not in edited_rows.items():
+        for rw_idx, row_changes in edited_rows.items():
+            if "tags" not in row_changes:
                 continue
+            print(f"EDITED TAGS:{row_changes["tags"]}")
             row_idx_int = int(rw_idx)
-            transaction_id = current_df.ilos[row_idx_int]["transaction_id"]
-            new_tags = row_canges["tags"]
+            transaction_id = current_df.iloc[row_idx_int]["transaction_id"]
+            new_tags = row_changes["tags"]
             if isinstance(new_tags, str):
                 new_tags = [t.strip().lower() for t in new_tags.split(',') if t.strip()]
             elif isinstance(new_tags, list):
@@ -188,6 +199,7 @@ class CategoryStore:
             else:
                 new_tags = []
             self.set_tags(transaction_id, new_tags)
+            print(f"STORE TAGS NOW {self.tags} and filename {self.current_file}")
     @staticmethod
     def normalize_category(name: str) -> str:
         return (name or "").strip().lower()

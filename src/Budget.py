@@ -13,12 +13,12 @@ class Transaction:
 
 @dataclass
 class BudgetLine:
-    category: str
+    category: str = ""
     include_tags: tuple[str, ...] = ()
     exclude_tags: tuple[str, ...] = ()
 
     def matches(self, tx: Transaction):
-        if tx.category != self.category:
+        if self.category and tx.category != self.category:
             return False
         if self.exclude_tags and any(t in self.exclude_tags for t in tx.tags):
             return False

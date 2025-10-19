@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import os
-import json
+from datetime import date
+from Budget import Budget, BudgetLine
 from constants import(
     EXPENSES_CATEGORY,
     INCOME_CATEGORY
@@ -54,11 +54,6 @@ def create_df_from_file(uploaded_transactions):
             placeholder="Add groceries, videogames, dinning..",
             key="category-input"
             )
-        tag_text = st.text_input(
-            "Add new transaction tag",
-            placeholder="Add protein, fruit, futbol..",
-            key="tag-input"
-            )
         col1_e, col2_e, col3_e = st.columns(3)
         with col1_e:
             category_button = st.button(
@@ -69,14 +64,51 @@ def create_df_from_file(uploaded_transactions):
                 st.session_state["store"].add_category(name=category_text, scope="categories")
                 category_text = ""
         with col2_e:
-            tag_button = st.button(
-                "Add tag", 
-                key="add_tag_button"
+            budget_button = st.button(
+                "Create budget", 
+                key="create_budget_button"
             )
-            if tag_text and tag_button:
-                # st.session_state["store"].add_category(name=category_text, scope="categories")
-                # category_text = ""
-                # st.session_state["store"].add_tags(tag=tag_text, )
+            if budget_button:
+                st.session_state["Add budget"] = True
+            if st.session_state.get("Add budget", False):
+                with st.form(key="budget_form"):
+                    name = st.text_input("New budget name")
+                    categories = st.multiselect("Add categories", options=st.session_state["store"].data["categories"])
+                    tags = st.multiselect("Add tags", options=st.session_state["store"].tags_list)
+                    tags_exclude = st.multiselect("Exclude tags", options=st.session_state["store"].tags_list)
+                    budget_limit = st.number_input("Add budget limit")
+                    start_date = st.date_input(
+                        "Start Date",
+                        min_value=date(2025, 1, 1),
+                        max_value=date(2030, 12, 31),
+                        value=date(2025, 1, 1)
+                        )
+                    end_date = st.date_input(
+                        "End Date",
+                        min_value=date(2025, 1, 1),
+                        max_value=date(2030, 12, 31),
+                        value=date(2030, 12, 31)
+                        )
+                    submitted = st.form_submit_button("Submit")
+                    if submitted:
+                        print("is this shit running")
+                        new_budget = Budget(
+                            name=name, 
+                            start_date=start_date, 
+                            end_date=end_date,
+                            limit=budget_limit
+                            )
+                        for category in categories:
+                            new_budget.add_line(BudgetLine(category=category)) 
+                        if tags:
+                            new_budget.add_line(BudgetLine(include_tags=tags))
+                        if tags_exclude:
+                            new_budget.add_line(BudgetLine(exclude_tags=tags))
+                        
+                        print(new_budget.transactions)
+                        print(new_budget.summary())
+                        st.session_state["Add budget"] = False
+                    
         with col3_e:
             save_button = st.button(
                 "Save changes", 
@@ -97,6 +129,12 @@ def create_df_from_file(uploaded_transactions):
                     required=True,
                 ),
                 "transaction_id": None,
+                "tags": st.column_config.MultiselectColumn(
+                    "tags",
+                    help="Select multiple tags (type to search)",
+                    options=st.session_state["store"].tags_list,
+                    required=False
+                )
             },
             on_change=edit_rows_wrapper,
             args=(
@@ -167,7 +205,6 @@ def create_df_from_file(uploaded_transactions):
             title="Income by Category"
             )
         st.plotly_chart(fig_income, use_container_width=True)
-    return df_expenses, df_income
 
 def main():
     load_page()
@@ -176,7 +213,7 @@ def main():
         type=['csv']
     )
     if uploaded_transactions is not None:
-        df_expenses, df_income = create_df_from_file(uploaded_transactions)
+        create_df_from_file(uploaded_transactions)
     else:
         st.info("Please upload a CSV file")
     
