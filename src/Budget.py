@@ -1,15 +1,9 @@
 from dataclasses import dataclass, field
 from datetime import date
+from datetime import datetime, date
 from typing import Iterable, Literal
 
-@dataclass
-class Transaction:
-    date: date
-    amount: float
-    details: str
-    category: str
-    debit_credit: Literal["debit", "credit"]
-    tags: tuple[str, ...] = ()
+import pandas as pd
 
 @dataclass
 class BudgetLine:
@@ -17,15 +11,18 @@ class BudgetLine:
     include_tags: tuple[str, ...] = ()
     exclude_tags: tuple[str, ...] = ()
 
-    def matches(self, tx: Transaction):
-        if self.category and tx.category != self.category:
+    def matches(self, row: pd.Series) -> bool:
+        tx_category = row.get("Category", "").lower()
+        tx_tags = row.get("tags", ())
+        if self.category.lower() and tx_category.lower() != self.category.lower():
             return False
-        if self.exclude_tags and any(t in self.exclude_tags for t in tx.tags):
+        if self.exclude_tags and any(t in self.exclude_tags for t in tx_tags):
             return False
         if self.include_tags:
-            return any(t in self.include_tags for t in tx.tags)
+            has_included_tag = any(t in self.include_tags for t in tx_tags)
+            if not has_included_tag:
+                return False
         return True
-
 
 @dataclass
 class Budget:
@@ -34,38 +31,71 @@ class Budget:
     end_date: date
     limit: float
     budget_lines: list[BudgetLine] = field(default_factory=list)
-    transactions: list[Transaction] = field(default_factory=list)
+    transactions: pd.DataFrame = field(default_factory=lambda: pd.DataFrame())
     
     def add_line(self, line: BudgetLine) -> None:
         self.budget_lines.append(line)
-    def add_transaction(self, tx: Transaction) -> None:
-        if self.start_date <= tx.date <= self.end_date:
-            self.transactions.append(tx)
-    def assign_line(self, tx: Transaction) -> BudgetLine | None:
+    def add_transaction(self, row: pd.Series) -> None:
+        tx_date = row.get("Date")
+        if isinstance(tx_date, pd.Timestamp):
+            tx_date = tx_date.date()
+        elif isinstance(tx_date, datetime):
+            tx_date = tx_date.date()
+        elif isinstance(tx_date, date):
+            pass
+        elif isinstance(tx_date, str):
+            try:
+                tx_date = datetime.strptime(tx_date, "%Y-%m-%d").date()
+            except ValueError:
+                print(f"Skipping row due to invalid date")
+                return
+        else:
+            print(f"Skipping row due to invalid date")
+            return
+        row_match = self.assign_line(row)
+        if not row_match:
+            return
+        if row_match:
+            print(row)
+        start = self.start_date if isinstance(self.start_date, date) else self.start_date.date()
+        end = self.end_date if isinstance(self.end_date, date) else self.end_date.date()
+        
+        if start <= tx_date <= end:
+            if self.transactions.empty:
+                self.transactions = pd.DataFrame([row])
+            else:
+                self.transactions = pd.concat(
+                    [self.transactions, 
+                    pd.DataFrame([row])], 
+                    ignore_index=True
+                )
+    def assign_line(self, row: pd.Series) -> BudgetLine | None:
         for line in self.budget_lines:
-            if line.matches(tx):
+            if line.matches(row):
                 return line
         return None
-    def total_spent(self) -> float:
-        total = 0
-        for tx in self.transactions:
-            total += tx.amount
-        return total
-    def per_line_spent(self) -> dict[str, float]:
+    def total_spent(self) -> float: #transactions is all of them and no filter
+        return self.transactions["Amount"].sum() if not self.transactions.empty else 0.0
+    def per_category_spent(self) -> dict[str, float]:
         spent: dict[str, float] = {}
-        for tx in self.transactions:
-            line = self.assign_line(tx)
+        for _, row in self.transactions.iterrows():
+            line = self.assign_line(row)
             if not line:
                 continue
-            spent[line.category] = spent.get(line.category, 0.0) + tx.amount
+            spent[line.category] = spent.get(line.category, 0.0) + row["Amount"]
         return spent
     def per_tag_spent(self) -> dict[str, float]:
         spent: dict[str, float] = {}
-        for tx in self.transactions:
-            for tag in tx.tags:
-                spent[tag] = spent.get(tag, 0.0) + tx.amount
+        for _, row in self.transactions.iterrows():
+            line = self.assign_line(row)
+            if not line:
+                continue
+            tags = row.get("tags", ())
+            for tag in tags:
+                spent[tag] = spent.get(tag, 0.0) + row["Amount"]
         return spent
-
+    def get_transactions(self) -> pd.DataFrame:
+        return self.transactions
     def summary(self) -> dict:
         total = self.total_spent()
         remaining = self.limit - total
@@ -74,18 +104,8 @@ class Budget:
             "total_spent": total,
             "remaining": remaining,
             "is_exceeded": total > self.limit,
-            "per_line_spent": self.per_line_spent(),
+            "per_category_spent": self.per_category_spent(),
             "per_tag_spent": self.per_tag_spent()
         }
     
-
-# # Example usage
-# b = Budget("November", date(2025, 11, 1), date(2025, 11, 30), limit=800.0)
-# b.add_line(BudgetLine(category="groceries"))
-# b.add_line(BudgetLine(category="restaurants"))
-
-# b.add_transaction(Transaction(date(2025, 11, 2), 32.5, "groceries", ("costco",)))
-# b.add_transaction(Transaction(date(2025, 11, 7), 45.0, "restaurants", ("takeout",)))
-# b.add_transaction(Transaction(date(2025, 11, 10), 10.0, "groceries", ("refund",)))
-
-# print(b.summary()) 
+    
