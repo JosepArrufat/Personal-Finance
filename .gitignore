@@ -1,0 +1,8 @@
+__pycache__/
+venv/
+.env
+budgets.json
+tags.json
+categories.json
+income_categories.json
+

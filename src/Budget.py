@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from datetime import datetime, date
 from typing import Iterable, Literal
-
+from dataclasses import asdict
 import pandas as pd
 
 @dataclass
@@ -13,15 +13,22 @@ class BudgetLine:
 
     def matches(self, row: pd.Series) -> bool:
         tx_category = row.get("Category", "").lower()
-        tx_tags = row.get("tags", ())
-        if self.category.lower() and tx_category.lower() != self.category.lower():
+        raw_tags = row.get("tags", ())
+        if isinstance(raw_tags, str):
+            tx_tags = [t.strip().lower() for t in raw_tags.split(",") if t.strip()]
+        elif isinstance(raw_tags, (list, tuple)):
+            tx_tags = [str(t).strip().lower() for t in raw_tags if str(t).strip()]
+        else:
+            tx_tags = []
+        exclude_lower = {str(t).lower() for t in (self.exclude_tags or [])}
+        include_lower = {str(t).lower() for t in (self.include_tags or [])}
+
+        if exclude_lower and any(t in exclude_lower for t in tx_tags):
             return False
-        if self.exclude_tags and any(t in self.exclude_tags for t in tx_tags):
-            return False
-        if self.include_tags:
-            has_included_tag = any(t in self.include_tags for t in tx_tags)
-            if not has_included_tag:
-                return False
+        if include_lower and any(t in include_lower for t in tx_tags):
+            return True
+        if self.category:
+            return tx_category == self.category.lower()
         return True
 
 @dataclass
@@ -32,6 +39,7 @@ class Budget:
     limit: float
     budget_lines: list[BudgetLine] = field(default_factory=list)
     transactions: pd.DataFrame = field(default_factory=lambda: pd.DataFrame())
+    tx_ids: list[str] = field(default_factory=list)
     
     def add_line(self, line: BudgetLine) -> None:
         self.budget_lines.append(line)
@@ -96,6 +104,19 @@ class Budget:
         return spent
     def get_transactions(self) -> pd.DataFrame:
         return self.transactions
+    def get_num_transactions(self) -> int:
+        return len(self.tx_ids)
+    def to_dict(self) -> dict:
+        data = {
+            "name": self.name,
+            "start_date": self.start_date.isoformat() if isinstance(self.start_date, date) else self.start_date,
+            "end_date": self.end_date.isoformat() if isinstance(self.end_date, date) else self.end_date,
+            "limit": self.limit,
+            "budget_lines": [asdict(bl) for bl in self.budget_lines],
+            "tx_ids": list(self.tx_ids) if self.tx_ids else [],
+        }
+        return data
+
     def summary(self) -> dict:
         total = self.total_spent()
         remaining = self.limit - total
@@ -107,5 +128,33 @@ class Budget:
             "per_category_spent": self.per_category_spent(),
             "per_tag_spent": self.per_tag_spent()
         }
+    @classmethod
+    def from_dict(cls, d: dict) -> "Budget":
+        sd = d.get("start_date")
+        ed = d.get("end_date")
+        try:
+            if isinstance(sd, str):
+                sd = date.fromisoformat(sd)
+            if isinstance(ed, str):
+                ed = date.fromisoformat(ed)
+        except Exception:
+            pass
+
+        lines = []
+        for bl in d.get("budget_lines", []):
+            try:
+                lines.append(BudgetLine(**bl))
+            except Exception:
+                continue
+        b = cls(
+            name=d.get("name", ""),
+            start_date=sd,
+            end_date=ed,
+            limit=d.get("limit", 0.0),
+            budget_lines=lines,
+        )
+        b.transactions = pd.DataFrame()
+        b.tx_ids = d.get("tx_ids", []) or []
+        return b
     
     
