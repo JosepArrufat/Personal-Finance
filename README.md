@@ -1,4 +1,4 @@
-Personal Finance — Simple budgeting and transaction categorization
+Personal Finance: Simple budgeting and transaction categorization
 
 A lightweight Streamlit app to import CSV bank/credit-card statements, automatically categorize transactions (with a persisting tag store), and track budgets safely by storing transaction IDs (not raw DataFrames).
 
@@ -35,11 +35,11 @@ python -m unittest discover -v
 
 Files and configuration
 
-- `src/app.py` — Streamlit UI (keeps rendering and user interactions).
-- `src/functions.py` — non-UI helpers (CSV parsing, session initialization, tx_id generation).
-- `src/CategoryStore.py` — tag/category persistence (uses `categories.json`, `income_categories.json`, `tags.json`).
-- `src/Budget.py`, `src/BudgetManager.py` — budgets persisted to `budgets.json` (stores `tx_ids` rather than DataFrames).
-- `src/constants.py` — canonical session-state keys and defaults.
+- `src/app.py` Streamlit UI (keeps rendering and user interactions).
+- `src/functions.py` non-UI helpers (CSV parsing, session initialization, tx_id generation).
+- `src/CategoryStore.py` tag/category persistence (uses `categories.json`, `income_categories.json`, `tags.json`).
+- `src/Budget.py`, `src/BudgetManager.py` budgets persisted to `budgets.json` (stores `tx_ids` rather than DataFrames).
+- `src/constants.py` canonical session-state keys and defaults.
 
 CSV input expectations
 
